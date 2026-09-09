@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sabet</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div id="homeHeading" class="wordmark"><span class="brand">Sabet</span><span class="brand-cut" aria-hidden="true"></span></div>
+      <div id="settingsHeading" class="settings-heading" hidden>
+        <button id="backBtn" class="icon-button" aria-label="Kembali"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+        <h1>Pengaturan</h1>
+      </div>
+      <button id="settingsBtn" class="icon-button" aria-label="Pengaturan" title="Pengaturan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></button>
+    </header>
+
+    <div id="scrollArea" class="scroll-area">
+      <main id="homeView">
+        <section id="pagePanel" class="page-panel" aria-live="polite">
+          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4h10a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M5 17a2 2 0 0 1 2-2h12M9 8h6M9 11h4"/></svg></span>
+          <div><strong id="platformBadge">Memeriksa halaman</strong><p id="pageHint">Sebentar...</p></div>
+        </section>
+
+        <section id="sessionPanel" class="session-panel" hidden aria-live="polite">
+          <span class="session-label">Kuis kamu</span>
+          <h2 id="sessionPhase"></h2>
+          <p id="sessionDetail"></p>
+          <p id="sessionError" hidden></p>
+          <p id="sessionStats" class="session-count" hidden></p>
+        </section>
+
+        <fieldset id="providerGroup" class="provider-group">
+          <legend>Pilih AI</legend>
+          <div class="provider-options" id="providerOptions"></div>
+        </fieldset>
+
+        <label class="prompt-label" for="prompt">Catatan <span>opsional</span></label>
+        <textarea id="prompt" rows="2" placeholder="Misalnya, jawab dalam bahasa Indonesia." aria-describedby="promptHint"></textarea>
+        <span id="promptHint" class="sr-only">Tambahkan arahan untuk jawaban.</span>
+      </main>
+
+      <section id="settingsView" hidden aria-labelledby="settingsHeading">
+        <label for="transport">Gunakan</label>
+        <select id="transport"><option value="tab">Akun AI saya</option><option value="api">Kunci API sendiri</option></select>
+        <div id="apiSettings" hidden>
+          <div class="field-heading"><label for="apiKey">Kunci API</label><a id="apiKeyLink" target="_blank" rel="noopener">Dapatkan kunci</a></div>
+          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Tempel kunci">
+          <label for="model">Model AI</label>
+          <input id="model" spellcheck="false">
+        </div>
+        <div class="settings-footnote"><span class="settings-provider"></span><div class="version">v1.0.0</div></div>
+      </section>
+    </div>
+
+    <footer class="action-bar">
+      <p id="status" role="status" aria-live="polite" hidden></p>
+      <button id="sendBtn" class="primary" disabled><span id="sendLabel">Mulai</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
+      <button id="stopBtn" class="stop-button" hidden><span aria-hidden="true" class="stop-mark"></span><span id="stopLabel">Hentikan</span></button>
+      <button id="saveBtn" class="primary" hidden>Simpan</button>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

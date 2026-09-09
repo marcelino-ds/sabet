@@ -1,0 +1,112 @@
+@font-face {
+  font-family: Figtree;
+  src: url("assets/figtree.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+}
+:root {
+  color-scheme: light;
+  --paper: #fafaf7;
+  --ink: #232826;
+  --muted: #6b736e;
+  --line: #e3e6df;
+  --accent: #2b7055;
+  --soft: #edf3ed;
+  --danger: #a13f33;
+  --radius: 12px;
+  font: 14px/1.45 Figtree, "Trebuchet MS", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+/* Keep the action popup from collapsing to the browser's tiny bootstrap viewport. */
+html { width: min(360px, max(320px, 100vw)); height: min(480px, max(400px, 100vh)); overflow: hidden; }
+body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, a, input, textarea, select, fieldset { min-width: 0; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+.app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; min-width: 0; }
+.app-header { padding: 19px 22px 15px; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 70px; }
+.wordmark { display: flex; gap: 5px; align-items: center; }
+.brand { font-size: 27px; line-height: 1.2; font-weight: 800; letter-spacing: -1.2px; }
+.brand-cut { width: 5px; height: 23px; transform: skew(-22deg); border-radius: 1px; background: var(--accent); }
+.icon-button { display: grid; place-items: center; width: 34px; height: 34px; padding: 7px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); flex: 0 0 auto; }
+.icon-button:hover { background: #eff0ea; color: var(--ink); }
+svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.icon-button circle { fill: var(--paper); }
+.settings-heading { display: flex; gap: 10px; align-items: center; }
+h1 { font-size: 17px; line-height: 1.4; margin: 0; font-weight: 700; letter-spacing: -.3px; }
+.settings-heading .icon-button { margin-left: -8px; color: var(--ink); }
+.scroll-area { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #c6cdc3 transparent; }
+main, #settingsView { padding: 0 22px 16px; }
+.page-panel { display: flex; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(110deg,#f0f3eb,#f7f8f3); padding: 14px; margin: 0 0 24px; }
+.page-panel[data-ready="true"] { background: linear-gradient(110deg,#e8f1e9,#f2f6ef); border-color: #d6e3d6; }
+.page-panel > div { min-width: 0; }
+.page-icon { color: var(--accent); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #fff9; flex-shrink: 0; }
+.page-panel strong { font-size: 13px; font-weight: 650; }
+.page-panel p { font-size: 12px; margin: 3px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.provider-group { border: 0; margin: 0 0 22px; padding: 0; }
+legend, label { font-weight: 650; font-size: 13px; padding: 0; }
+legend { margin-bottom: 10px; }
+.provider-options { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+.provider-choice { display: grid; grid-template-rows: auto auto; align-content: center; justify-items: center; gap: 7px; min-height: 79px; border: 1px solid var(--line); border-radius: var(--radius); position: relative; background: #fff; cursor: pointer; padding: 11px 5px; font-size: 12px; }
+.provider-choice:hover { border-color: #b6c7b8; }
+.provider-choice:has(input:checked) { background: var(--soft); border-color: #85aa8d; box-shadow: inset 0 0 0 1px #85aa8d; }
+.provider-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.provider-choice:has(input:disabled) { cursor: default; opacity: .6; }
+.provider-choice input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.provider-choice .provider-symbol { width: 24px; height: 24px; display: grid; place-items: center; font-size: 19px; line-height: 1; font-weight: 600; }
+.provider-choice .provider-symbol svg { width: 23px; height: 23px; }
+.provider-choice .selection-dot { position: absolute; top: 7px; right: 7px; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; opacity: 0; }
+.provider-choice:has(input:checked) .selection-dot { opacity: 1; }
+.prompt-label { display: flex; justify-content: space-between; margin-bottom: 9px; }
+.prompt-label span { font-size: 12px; font-weight: 400; color: var(--muted); }
+textarea, input:not([type="radio"]), select { width: 100%; border: 1px solid var(--line); border-radius: 9px; background: #fff; padding: 11px 12px; outline: none; }
+textarea { resize: vertical; min-height: 72px; max-height: 144px; font-size: 13px; line-height: 1.5; display: block; }
+textarea::placeholder, input::placeholder { color: #8a928a; opacity: 1; }
+textarea:focus, input:not([type="radio"]):focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #2b705514; }
+textarea:disabled { opacity: .65; }
+#settingsView > label, #apiSettings > label { display: block; margin: 4px 0 9px; }
+#settingsView select, #apiSettings input { margin-bottom: 20px; }
+#apiSettings { padding-top: 6px; }
+.field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 9px; }
+.field-heading a { font-size: 11px; color: var(--accent); text-decoration: none; }
+.field-heading a:hover { text-decoration: underline; }
+.settings-footnote { display: flex; justify-content: space-between; color: #8a928a; font-size: 11px; margin-top: 8px; }
+.action-bar { padding: 14px 22px 20px; background: linear-gradient(#fafaf7f5, var(--paper)); border-top: 1px solid var(--line); min-width: 0; }
+.primary, .stop-button { width: 100%; display: flex; justify-content: center; align-items: center; gap: 12px; min-height: 46px; border: 0; border-radius: 11px; padding: 11px 16px; font-weight: 650; font-size: 14px; }
+.primary { background: var(--accent); color: #fff; box-shadow: 0 2px 3px #2048310d; }
+.primary:hover:not(:disabled) { background: #225e46; }
+.primary:disabled { background: #e2e7de; color: #7a8477; box-shadow: none; }
+.primary svg { width: 17px; height: 17px; }
+.stop-button { background: #fff; color: var(--danger); border: 1px solid #e6cfc6; }
+.stop-button:hover { background: #fcf0ec; }
+.stop-mark { width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
+#status { margin: 0 0 12px; max-height: 70px; overflow: auto; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+#status[data-tone="error"] { color: var(--danger); }
+.session-panel { background: linear-gradient(125deg,#edf3ed,#f8faf5); border: 1px solid #d6e3d6; border-radius: var(--radius); padding: 16px; margin-bottom: 22px; }
+.session-panel[data-tone="error"] { background: #fcf4ef; border-color: #ebd8cd; }
+.session-label { font-size: 11px; color: var(--muted); }
+.session-panel h2 { margin: 6px 0; font-size: 22px; letter-spacing: -.6px; line-height: 1.25; font-weight: 700; }
+.session-panel p { margin: 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.session-panel #sessionError { color: var(--danger); }
+.session-panel .session-count { display: inline-flex; margin-top: 12px; padding: 4px 8px; border-radius: 6px; background: #fff9; color: var(--ink); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media(max-width:335px) {
+  .app-header { padding-inline: 16px; }
+  main, #settingsView, .action-bar { padding-inline: 16px; }
+  .provider-options { gap: 6px; }
+}
+@media(max-height:420px) {
+  .app-header { padding-top: 12px; padding-bottom: 10px; min-height: 56px; }
+  .action-bar { padding-top: 10px; padding-bottom: 12px; }
+  .page-panel { margin-bottom: 18px; }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .primary, .icon-button, .provider-choice { transition: background .15s, border-color .15s; }
+}
