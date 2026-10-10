@@ -1,0 +1,27 @@
+{
+  "name": "sabet",
+  "version": "1.0.0",
+  "description": "Kuis Moodle pake Gemini, ChatGPT, atau Claude.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "check": "npm run lint && npm test && npm run build",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "happy-dom": "^20.14.0",
+    "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
