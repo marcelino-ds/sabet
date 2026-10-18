@@ -173,3 +173,13 @@ describe('moodleFillMatch — soal menjodohkan', () => {
     expect(moodleFillMatch(q, ['tiga'], () => {})).toBe(false);
   });
 });
+
+describe('moodleFillMultichoice — checkbox dengan satu jawaban', () => {
+  it('clears boxes left checked by an earlier wrong attempt', () => {
+    const { que, radios } = mc(['Merah', 'Biru', 'Hijau'], 'checkbox');
+    radios[0].checked = true;
+    radios[2].checked = true;
+    expect(fill(que, 'Biru', 2)).toBe(true);
+    expect(radios.map(r => r.checked)).toEqual([false, true, false]);
+  });
+});

@@ -42,9 +42,17 @@ export function moodleFillMultichoice(queEl, originalJaw, jaw, idxHint, status) 
     return null;
   };
 
+  const uncheck = input => {
+    input.click();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
   const select = opt => {
     if (!opt) return;
     moodleClickRadio(opt.input);
+    // Checkbox tidak saling menghapus seperti radio: centang dari percobaan lama
+    // harus dilepas, kalau tidak CHECK mengirim jawaban gabungan.
+    if (opt.input.type === 'checkbox') for (const other of options) if (other !== opt && other.input.checked) uncheck(other.input);
     highlightElement(opt.input.closest('.r0,.r1,.r2,.r3,.r4,div,label') || opt.input.parentElement);
   };
 
@@ -90,9 +98,7 @@ export function moodleFillMultichoice(queEl, originalJaw, jaw, idxHint, status) 
         if (shouldCheck) {
           moodleClickRadio(opt.input);
         } else {
-          opt.input.click();
-          opt.input.dispatchEvent(new Event('change', { bubbles: true }));
-          opt.input.dispatchEvent(new Event('input', { bubbles: true }));
+          uncheck(opt.input);
         }
         highlightElement(opt.input.closest('.r0,.r1,.r2,.r3,.r4,div,label') || opt.input.parentElement);
         matchCount++;
@@ -106,11 +112,7 @@ export function moodleFillMultichoice(queEl, originalJaw, jaw, idxHint, status) 
       // Ada jawaban AI yang tidak bisa dipetakan ke opsi. Jangan tinggalkan subset
       // tercentang lalu terlanjur CHECK sebagai jawaban parsial.
       for (const opt of options) {
-        if (opt.input.checked) {
-          opt.input.click();
-          opt.input.dispatchEvent(new Event('change', { bubbles: true }));
-          opt.input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        if (opt.input.checked) uncheck(opt.input);
       }
       matchCount = 0;
     }

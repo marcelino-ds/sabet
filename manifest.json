@@ -13,10 +13,7 @@
     "https://*/*",
     "https://gemini.google.com/*",
     "https://chatgpt.com/*",
-    "https://claude.ai/*",
-    "https://generativelanguage.googleapis.com/*",
-    "https://api.openai.com/*",
-    "https://api.anthropic.com/*"
+    "https://claude.ai/*"
   ],
   "background": {
     "service_worker": "background.js"

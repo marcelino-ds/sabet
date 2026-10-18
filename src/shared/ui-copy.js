@@ -21,11 +21,14 @@ export function sessionCopy(session) {
 
 export function friendlyError(error) {
   const text = String(error || '').toLowerCase();
+  if (/gambar.*dilampirkan/.test(text)) return 'Gambar nggak masuk ke AI. Coba AI lain.';
+  if (/gambar soal/.test(text)) return 'Gambar soal nggak kebaca.';
+  if (/prompt tidak masuk/.test(text)) return 'Soal nggak masuk ke AI.';
+  if (/tab ai ditutup/.test(text)) return 'Tab AI ketutup.';
+  if (/jawaban ai tidak valid/.test(text)) return 'Jawaban AI nggak kebaca.';
   if (/elemen ai|provider.*siap|login/.test(text)) return 'Login dulu di tab AI.';
-  if (/api key belum|isi key|key belum/.test(text)) return 'API key kosong. Isi di Pengaturan.';
   if (/belum memberi nilai|hasil pemeriksaan/.test(text)) return 'Nilai belum keluar.';
   if (/jawaban.*(diterapkan|diisi)|jumlah jawaban|editor/.test(text)) return 'Jawaban nggak keisi.';
-  if (/api\s*(401|403)|invalid\s*(api )?key|kunci ai/.test(text)) return 'API key ditolak.';
   if (/rate[ -]?limit|429|terlalu banyak|busy/.test(text)) return 'AI lagi penuh.';
   if (/session changed|question changed|soal berubah|jawaban diubah/.test(text)) return 'Soalnya berubah. Buka lagi.';
   if (/not found|tidak ditemukan|belum tersedia|bukan halaman|moodle/.test(text)) return 'Buka halaman soalnya dulu.';

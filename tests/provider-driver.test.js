@@ -33,4 +33,34 @@ describe('provider DOM driver', () => {
     await driver.writePrompt(document.querySelector('textarea'), 'full new question', new AbortController().signal);
     expect(document.querySelector('textarea').value).toBe('full new question');
   });
+  it('falls back to paste when the page file input does not attach the image', async () => {
+    document.body.innerHTML = '<input type="file" accept="image/*"><div contenteditable="true"></div>';
+    const editor = document.querySelector('[contenteditable]');
+    let pasted = 0;
+    editor.addEventListener('paste', event => { pasted = event.clipboardData.files.length; document.body.append(Object.assign(document.createElement('img'), { className: 'preview' })); });
+    await driver.attachImage(editor, 'data:image/png;base64,iVBORw0KGgo=', new AbortController().signal, 50);
+    expect(pasted).toBe(1);
+  });
+  it('stops with an image error instead of sending the question without its image', async () => {
+    document.body.innerHTML = '<div contenteditable="true"></div>';
+    await expect(driver.attachImage(document.querySelector('[contenteditable]'), 'data:image/png;base64,iVBORw0KGgo=', new AbortController().signal, 20))
+      .rejects.toThrow('Gambar soal gagal dilampirkan');
+  });
+});
+
+describe('writePrompt — editor rich-text', () => {
+  it('accepts paragraphs from a rich editor without pasting the prompt twice', async () => {
+    document.body.innerHTML = '<div contenteditable="true"></div>';
+    const editor = document.querySelector('[contenteditable]');
+    let pastes = 0;
+    // Seperti ProseMirror: tiap baris jadi <p>, insertText tidak didukung.
+    editor.addEventListener('paste', event => {
+      pastes++;
+      event.preventDefault();
+      editor.innerHTML = event.clipboardData.getData('text/plain').split('\n').map(line => `<p>${line}</p>`).join('');
+    });
+    await driver.writePrompt(editor, 'baris satu\nbaris dua', new AbortController().signal);
+    expect(pastes).toBe(1);
+    expect(editor.querySelectorAll('p')).toHaveLength(2);
+  });
 });

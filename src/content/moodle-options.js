@@ -1,4 +1,5 @@
 // Pembacaan opsi multichoice/truefalse — satu sumber kebenaran untuk extract & fill.
+import { mathToTex } from './html-to-markdown.js';
 
 // Find label text for a radio/checkbox (robust for Moodle DOM)
 export function getRadioLabelText(radio, queEl) {
@@ -9,14 +10,11 @@ export function getRadioLabelText(radio, queEl) {
     clone.querySelectorAll(
       'input, .accesshide, .sr-only, .answernumber, .icon, .feedback, .specificfeedback, [aria-hidden="true"]'
     ).forEach(n => n.remove());
-    clone.querySelectorAll('script[type^="math/tex"]').forEach(s => {
-      const tex = (s.textContent || '').trim();
-      if (tex) s.replaceWith(document.createTextNode(` $${tex}$ `));
-    });
-    clone.querySelectorAll('mjx-container, math').forEach(m => {
-      const anno = m.querySelector('annotation[encoding="application/x-tex"]');
-      const tex = (anno?.textContent || m.getAttribute('aria-label') || m.textContent || '').trim();
-      if (tex) m.replaceWith(document.createTextNode(` $${tex}$ `));
+    mathToTex(clone, { inline: true });
+    // Opsi bergambar: tanpa penanda ini teksnya kosong lalu jatuh ke value ("0", "1").
+    clone.querySelectorAll('img').forEach(img => {
+      const alt = (img.getAttribute('alt') || '').trim();
+      img.replaceWith(document.createTextNode(alt ? ` [gambar: ${alt}] ` : ' [gambar] '));
     });
     return (clone.innerText || clone.textContent || '').replace(/\s+/g, ' ').trim();
   };
@@ -68,7 +66,9 @@ export function getMoodleOptions(queEl) {
   return inputs.map((input, index) => ({
     input,
     index,                                  // 0-based; index_pilihan AI = index + 1
-    text: getRadioLabelText(input, queEl),
+    // Penanda gambar diberi nomor opsi: cocok dengan label komposit gambar dan
+    // mencegah beberapa opsi bergambar punya teks identik "[gambar]".
+    text: getRadioLabelText(input, queEl).replace(/\[gambar(?=[\]:])/g, `[gambar Opsi ${index + 1}`),
   }));
 }
 
@@ -88,11 +88,17 @@ export function getMatchRows(queEl) {
       // index), BUKAN ChildNode.remove(). Pakai removeChild via parent agar select &
       // option benar-benar terbuang dari clone.
       clone.querySelectorAll('select, option, .accesshide, .sr-only').forEach(n => n.parentNode?.removeChild(n));
+      mathToTex(clone, { inline: true });
+      // Stem bergambar: penanda ini cocok dengan label "Baris N" di gambar komposit.
+      clone.querySelectorAll('img').forEach(img => {
+        const alt = (img.getAttribute('alt') || '').trim();
+        img.replaceWith(document.createTextNode(` [gambar Baris ${index + 1}${alt ? ': ' + alt : ''}] `));
+      });
       stem = (clone.innerText || clone.textContent || '').replace(/\s+/g, ' ').trim();
     }
     const options = [...select.options]
       .map(o => (o.textContent || '').trim())
       .filter(t => t && !/^(choose|pilih|\.\.\.|—)/i.test(t)); // buang placeholder
-    return { select, index, stem, options };
+    return { select, index, row, stem, options };
   });
 }

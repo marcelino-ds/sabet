@@ -2,6 +2,7 @@ import { test, expect, chromium } from '@playwright/test';
 import { resolve } from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { deflateSync } from 'node:zlib';
 import { localNetwork } from './local-network.js';
 
 const lmsUrl = 'https://lms.test/mod/quiz/attempt.php?attempt=1';
@@ -31,7 +32,8 @@ function send() {
 
 async function launch(options = {}) {
   const dir = await mkdtemp(resolve(tmpdir(), 'sabet-browser-'));
-  const network = await localNetwork(host => host === 'lms.test' ? options.quiz || quiz : host === 'gemini.google.com' ? options.provider || provider : null);
+  const network = await localNetwork((host, url) => options.resource?.(host, url) ??
+    (host === 'lms.test' ? options.quiz || quiz : host === 'gemini.google.com' ? options.provider || provider : null));
   let context;
   try {
     const extension = resolve('dist');
@@ -53,14 +55,14 @@ async function start(f) {
   const response = await popup.evaluate(async url => {
     const tabs = await chrome.tabs.query({});
     const tab = tabs.find(t => t.url === url);
-    return chrome.runtime.sendMessage({ action: 'SESSION_START', tabId: tab.id, url, provider: 'gemini', transport: 'tab' });
+    return chrome.runtime.sendMessage({ action: 'SESSION_START', tabId: tab.id, url, provider: 'gemini' });
   }, lmsUrl);
   expect(response.ok, response.error).toBe(true);
   return { page, popup };
 }
 const read = f => f.worker.evaluate(async () => (await chrome.storage.local.get('sabetSession')).sabetSession);
 
-test('loads popup with working settings and no page errors', async () => {
+test('loads popup with only the tab-AI controls and no page errors', async () => {
   const f = await launch();
   try {
     const page = await f.context.newPage(); const errors = [];
@@ -68,16 +70,14 @@ test('loads popup with working settings and no page errors', async () => {
     await page.goto(`chrome-extension://${f.id}/popup.html`);
     await expect(page.locator('.brand')).toHaveText('Sabet');
     await expect(page.locator('input[name="provider"]')).toHaveCount(3);
+    await expect(page.locator('.version')).toHaveText(/^v\d+\.\d+\.\d+$/);
+    await expect(page.locator('#settingsBtn, #transport, #apiKey, #model')).toHaveCount(0);
     expect(await page.evaluate(async () => {
       const fonts = await document.fonts.load('400 14px Figtree');
       return fonts.length > 0 && fonts.every(font => font.status === 'loaded');
     })).toBe(true);
-    await page.locator('body').screenshot({ path: 'test-results/sabet-home.png', animations: 'disabled' });
-    await page.getByRole('button', { name: 'Pengaturan', exact: true }).click();
-    await page.selectOption('#transport', 'api');
-    await expect(page.locator('#apiKey')).toBeVisible();
     expect(errors).toEqual([]);
-    await page.locator('body').screenshot({ path: 'test-results/sabet-popup.png', animations: 'disabled' });
+    await page.locator('body').screenshot({ path: 'test-results/sabet-home.png', animations: 'disabled' });
   } finally { await f.close(); }
 });
 
@@ -110,18 +110,8 @@ test('opens the toolbar popup at a usable size and keeps its controls inside the
       const size = await layout('.brand');
       expect(size.width).toBeGreaterThanOrEqual(300);
       expect(size.height).toBeGreaterThanOrEqual(400);
-      for (const selector of ['.brand', '#settingsBtn', '#providerOptions', '#sendBtn']) {
+      for (const selector of ['.brand', '#providerOptions', '#prompt', '#sendBtn']) {
         expect((await layout(selector))?.visible, `${selector} fits in the toolbar popup`).toBe(true);
-      }
-      await observer.evaluate(() => {
-        const popup = chrome.extension.getViews({ type: 'popup' })[0];
-        popup.document.querySelector('#settingsBtn').click();
-        const transport = popup.document.querySelector('#transport');
-        transport.value = 'api';
-        transport.dispatchEvent(new popup.Event('change', { bubbles: true }));
-      });
-      for (const selector of ['#backBtn', '#apiKey', '#model', '#saveBtn']) {
-        expect((await layout(selector))?.visible, `${selector} fits in the toolbar popup settings`).toBe(true);
       }
       await observer.evaluate(() => chrome.extension.getViews({ type: 'popup' })[0].close());
       await expect.poll(() => observer.evaluate(() => chrome.extension.getViews({ type: 'popup' }).length)).toBe(0);
@@ -129,29 +119,18 @@ test('opens the toolbar popup at a usable size and keeps its controls inside the
   } finally { await f.close(); }
 });
 
-test('keeps the primary action visible in a short popup, including expanded settings', async () => {
+test('keeps the primary action visible in a short popup', async () => {
   const f = await launch();
   try {
     const page = await f.context.newPage();
     await page.setViewportSize({ width: 360, height: 400 });
     await page.goto(`chrome-extension://${f.id}/popup.html`);
-    const visibleAction = async selector => {
-      const box = await page.locator(selector).boundingBox();
-      expect(box).not.toBeNull();
-      expect(box.y).toBeGreaterThanOrEqual(0);
-      expect(box.y + box.height).toBeLessThanOrEqual(400);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
-    };
-    await visibleAction('#sendBtn');
-    await page.getByRole('button', { name: 'Pengaturan', exact: true }).click();
-    await page.selectOption('#transport', 'api');
-    await visibleAction('#saveBtn');
-    await page.locator('#model').fill('a-model-name-that-is-long-enough-to-overflow-a-small-popup');
-    await page.getByRole('button', { name: 'Kembali', exact: true }).click();
-    await visibleAction('#sendBtn');
-    await page.getByRole('button', { name: 'Pengaturan', exact: true }).click();
-    await page.locator('body').screenshot({ path: 'test-results/sabet-settings-short.png', animations: 'disabled' });
+    const box = await page.locator('#sendBtn').boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(400);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
   } finally { await f.close(); }
 });
 
@@ -173,7 +152,7 @@ test('shows a concise actionable error and keeps Stop reachable without internal
     await expect(page.locator('body')).not.toContainText(/precheck|permintaan|riwayat|waiting_for_answer/i);
     await page.locator('body').screenshot({ path: 'test-results/sabet-running.png', animations: 'disabled' });
     await f.worker.evaluate(() => chrome.storage.local.set({ sabetSession: {
-      id: 'ui-preview', phase: 'error', stats: { solved: 3 }, error: 'TypeError: undefined provider transport ' + 'X'.repeat(2000),
+      id: 'ui-preview', phase: 'error', stats: { solved: 3 }, error: 'TypeError: undefined provider ' + 'X'.repeat(2000),
     } }));
     await expect(page.locator('#sessionError')).toHaveText('Nggak bisa lanjut.');
     await expect(page.locator('body')).not.toContainText('TypeError');
@@ -208,7 +187,7 @@ test('keeps both page overlays inside a narrow viewport with a reachable Stop bu
   } finally { await f.close(); }
 });
 
-test('starts from the popup controls and retains saved settings for each AI', async () => {
+test('starts from the popup controls and remembers the chosen AI and note', async () => {
   const f = await launch();
   try {
     const quizPage = await f.context.newPage();
@@ -220,28 +199,19 @@ test('starts from the popup controls and retains saved settings for each AI', as
     await expect(popup.locator('#platformBadge')).toHaveText('Soalnya kebuka');
     await expect(popup.locator('#sendBtn')).toBeEnabled();
     await popup.locator('body').screenshot({ path: 'test-results/sabet-ready.png', animations: 'disabled' });
-    await popup.getByRole('button', { name: 'Pengaturan', exact: true }).click();
-    await popup.selectOption('#transport', 'api');
-    await popup.locator('#apiKey').fill('fake-gemini-key');
-    await popup.getByRole('button', { name: 'Simpan', exact: true }).click();
     await popup.getByRole('radio', { name: 'Claude', exact: true }).check();
-    await popup.getByRole('button', { name: 'Pengaturan', exact: true }).click();
-    await expect(popup.locator('#apiKey')).toHaveValue('');
-    await popup.locator('#apiKey').fill('fake-claude-key');
-    await popup.getByRole('button', { name: 'Simpan', exact: true }).click();
     await popup.getByRole('radio', { name: 'Gemini', exact: true }).check();
-    await popup.getByRole('button', { name: 'Pengaturan', exact: true }).click();
-    await expect(popup.locator('#apiKey')).toHaveValue('fake-gemini-key');
-    await popup.selectOption('#transport', 'tab');
-    await popup.getByRole('button', { name: 'Simpan', exact: true }).click();
     await popup.locator('#prompt').fill('Jawab dalam bahasa Indonesia.');
     await popup.getByRole('button', { name: 'Mulai', exact: true }).click();
     await expect(popup.locator('#stopBtn')).toBeVisible();
-    expect((await read(f)).prompt).toBe('Jawab dalam bahasa Indonesia.');
+    const s = await read(f);
+    expect(s.prompt).toBe('Jawab dalam bahasa Indonesia.');
+    expect(s.provider).toBe('gemini');
+    expect(s).not.toHaveProperty('transport');
     await popup.getByRole('button', { name: 'Hentikan', exact: true }).click();
     await expect(popup.locator('#sessionPhase')).toHaveText('Berhenti');
-    const prefs = await f.worker.evaluate(() => chrome.storage.local.get(['apiKey_gemini', 'apiKey_claude', 'prompt']));
-    expect(prefs).toEqual({ apiKey_gemini: 'fake-gemini-key', apiKey_claude: 'fake-claude-key', prompt: 'Jawab dalam bahasa Indonesia.' });
+    const prefs = await f.worker.evaluate(() => chrome.storage.local.get(['lastProvider', 'prompt']));
+    expect(prefs).toEqual({ lastProvider: 'gemini', prompt: 'Jawab dalam bahasa Indonesia.' });
   } finally { await f.close(); }
 });
 
@@ -327,4 +297,94 @@ test('cancel prevents a pending provider answer from filling a question', async 
     await expect.poll(async () => (await read(f))?.phase).toBe('aborted');
     await expect(page.locator('[name=a1]')).toHaveValue('');
   } finally { await f.close(); }
+});
+
+// Solid-color RGB PNG, so image fixtures need no binary files or dependencies.
+function png(width, height) {
+  const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = bytes => { let c = 0xffffffff; for (const b of bytes) c = table[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(body.length + 8); out.writeUInt32BE(data.length); body.copy(out, 4); out.writeUInt32BE(crc(body), body.length + 4);
+    return out;
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2;
+  const rows = Buffer.alloc((width * 3 + 1) * height, 200);
+  for (let y = 0; y < height; y++) rows[y * (width * 3 + 1)] = 0;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+// Answers '4' only when an image file arrived through the chosen route; records
+// what it received so the test can see the composite and the prompt.
+const imageProvider = route => `<!doctype html><html><body>
+${route === 'input' ? '<input type="file" accept="image/*" style="display:none" id="up">' : '<input type="file" accept=".pdf" style="display:none">'}
+<div contenteditable="true" class="ql-editor"></div>
+<button aria-label="Send message" onclick="send()">Send</button>
+<script>
+window.received = [];
+const accept = files => { for (const file of files) {
+  const url = URL.createObjectURL(file); const img = new Image();
+  img.onload = () => window.received.push({ type: file.type, width: img.naturalWidth, height: img.naturalHeight });
+  img.className = 'preview'; img.src = url; document.body.appendChild(img);
+} };
+document.querySelector('#up')?.addEventListener('change', e => accept(e.target.files));
+if (${JSON.stringify(route)} === 'paste') document.querySelector('.ql-editor').addEventListener('paste', e => { if (e.clipboardData.files.length) { e.preventDefault(); accept(e.clipboardData.files); } });
+function send() {
+  window.prompt = document.querySelector('.ql-editor').textContent;
+  document.querySelector('.ql-editor').textContent = '';
+  const bubble = document.createElement('model-response'); document.body.appendChild(bubble);
+  bubble.textContent = JSON.stringify({ jawaban: window.received.length ? '4' : 'tanpa-gambar', index_pilihan: window.received.length ? 2 : 1 });
+}
+</script></body></html>`;
+
+async function solveImageQuiz(question, { route = 'input' } = {}) {
+  const page = '<!doctype html><html><body class="path-mod-quiz"><form id="responseform">' + question + '</form></body></html>';
+  const f = await launch({
+    quiz: page, provider: imageProvider(route),
+    resource: (_host, url) => url.endsWith('.png') ? { type: 'image/png', body: png(120, 80) } : null,
+  });
+  try {
+    const { page: quizPage } = await start(f);
+    await expect.poll(async () => (await read(f))?.phase, { timeout: 25000 }).toMatch(/done|error/);
+    const providerPage = f.context.pages().find(p => p.url().startsWith('https://gemini.google.com/'));
+    const seen = await providerPage?.evaluate(() => ({ received: window.received, prompt: window.prompt })).catch(() => null);
+    return { session: await read(f), quizPage, seen, close: f.close };
+  } catch (error) { await f.close(); throw error; }
+}
+
+test('sends a lazy-loaded question image that has not been displayed yet', async () => {
+  const r = await solveImageQuiz('<div class="que shortanswer notyetanswered" id="q1"><div class="formulation">' +
+    '<div class="qtext">Berapa titiknya? <div style="height:5000px"></div><img src="/pluginfile.php/1/question/questiontext/dots.png" alt="" loading="lazy"></div>' +
+    '<div class="answer"><input type="text" name="a1"></div></div></div>');
+  try {
+    expect(r.session.error).toBeNull();
+    await expect(r.quizPage.locator('[name=a1]')).toHaveValue('4');
+    expect(r.seen.received).toEqual([{ type: 'image/png', width: 800, height: 110 }]);
+    expect(r.seen.prompt).toContain('Gambar terlampir: Gambar soal.');
+  } finally { await r.close(); }
+});
+
+test('reads a cross-origin question image through the background and falls back to paste', async () => {
+  const r = await solveImageQuiz('<div class="que shortanswer notyetanswered" id="q1"><div class="formulation">' +
+    '<div class="qtext">Berapa titiknya? <img src="https://cdn.test/soal/dots.png" alt=""></div>' +
+    '<div class="answer"><input type="text" name="a1"></div></div></div>', { route: 'paste' });
+  try {
+    expect(r.session.error).toBeNull();
+    await expect(r.quizPage.locator('[name=a1]')).toHaveValue('4');
+    expect(r.seen.received).toHaveLength(1);
+  } finally { await r.close(); }
+});
+
+test('labels image-only options with the same numbers the AI answers with', async () => {
+  const option = n => `<div class="r${n % 2}"><input type="radio" name="q1:1_answer" value="${n}" id="a${n}">` +
+    `<div class="d-flex" data-region="answer-label"><span class="answernumber">${'abc'[n]}. </span><img src="/pluginfile.php/1/question/answer/${n}.png" alt=""></div></div>`;
+  const r = await solveImageQuiz('<div class="que multichoice notyetanswered" id="q1"><div class="formulation">' +
+    '<div class="qtext">Mana gambar yang benar?</div><div class="answer">' + [0, 1, 2].map(option).join('') + '</div></div></div>');
+  try {
+    expect(r.session.error).toBeNull();
+    expect(r.seen.prompt).toContain('1. [gambar Opsi 1]');
+    expect(r.seen.prompt).toContain('Gambar terlampir: Opsi 1, Opsi 2, Opsi 3.');
+    expect(r.seen.received).toEqual([{ type: 'image/png', width: 972, height: 232 }]);
+    await expect(r.quizPage.locator('#a1')).toBeChecked();
+  } finally { await r.close(); }
 });

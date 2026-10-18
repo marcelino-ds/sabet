@@ -9,11 +9,26 @@ function question(html, type = 'shortanswer') {
 describe('Moodle adapter', () => {
   it('sends numbered choices from the actual inputs', async () => {
     const q = question('<label><input type="radio" name="q" value="0">Merah</label><label><input type="radio" name="q" value="1">Biru</label>', 'multichoice');
-    const data = await createMoodleAdapter().payload(q, { provider: 'gemini', prompt: 'Use Indonesian', error: 'Previous answer failed' });
+    const data = await createMoodleAdapter().payload(q, { provider: 'gemini', prompt: 'Use Indonesian', error: 'Elemen AI belum siap.' });
     expect(data.text).toContain('1. Merah');
     expect(data.text).toContain('2. Biru');
-    expect(data.prompt).toContain('Previous answer failed');
+    expect(data.text).toContain('PILIH SATU.');
+    // Teks soal dari .qtext: opsi hanya muncul sekali, di daftar bernomor.
+    expect(data.text.match(/Merah/g)).toHaveLength(1);
     expect(data.prompt).toContain('Use Indonesian');
+    expect(data.prompt).not.toContain('Elemen AI');
+  });
+  it('tells the AI which answers Moodle already graded wrong', async () => {
+    const q = question('<label><input type="radio" name="q" value="0">Merah</label><label><input type="radio" name="q" value="1">Biru</label>', 'multichoice');
+    const rejected = [{ answer: { jawaban: 'Merah', index_pilihan: 1 }, feedback: 'Your answer is incorrect.' }];
+    const data = await createMoodleAdapter().payload(q, { rejected });
+    expect(data.prompt).toContain('dinilai SALAH');
+    expect(data.prompt).toContain('"jawaban":"Merah"');
+    expect(data.prompt).toContain('Feedback Moodle: Your answer is incorrect.');
+  });
+  it('marks checkbox questions as multi-select', async () => {
+    const q = question('<label><input type="checkbox" value="0">Merah</label><label><input type="checkbox" value="1">Biru</label>', 'multichoice');
+    expect((await createMoodleAdapter().payload(q, {})).text).toContain('PILIH SATU ATAU LEBIH');
   });
   it('skips a completed matching question before its deferred grade exists', () => {
     const q = question('<select><option>One</option></select>', 'match');

@@ -9,12 +9,7 @@
 <body>
   <div class="app">
     <header class="app-header">
-      <div id="homeHeading" class="wordmark"><span class="brand">Sabet</span><span class="brand-cut" aria-hidden="true"></span></div>
-      <div id="settingsHeading" class="settings-heading" hidden>
-        <button id="backBtn" class="icon-button" aria-label="Kembali"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
-        <h1>Pengaturan</h1>
-      </div>
-      <button id="settingsBtn" class="icon-button" aria-label="Pengaturan" title="Pengaturan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></button>
+      <div class="wordmark"><span class="brand">Sabet</span><span class="brand-cut" aria-hidden="true"></span></div>
     </header>
 
     <div id="scrollArea" class="scroll-area">
@@ -40,26 +35,14 @@
         <label class="prompt-label" for="prompt">Catatan <span>opsional</span></label>
         <textarea id="prompt" rows="2" placeholder="misalnya: jawab bahasa Indonesia" aria-describedby="promptHint"></textarea>
         <span id="promptHint" class="sr-only">Catatan buat AI.</span>
+        <div class="footnote"><span>Login AI-nya di browser ini.</span><div class="version">v1.0.0</div></div>
       </main>
-
-      <section id="settingsView" hidden aria-labelledby="settingsHeading">
-        <label for="transport">Pakai</label>
-        <select id="transport"><option value="tab">Akun yang udah login</option><option value="api">API key sendiri</option></select>
-        <div id="apiSettings" hidden>
-          <div class="field-heading"><label for="apiKey">API key</label><a id="apiKeyLink" target="_blank" rel="noopener">Ambil kunci</a></div>
-          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="tempel di sini">
-          <label for="model">Model AI</label>
-          <input id="model" spellcheck="false">
-        </div>
-        <div class="settings-footnote"><span class="settings-provider"></span><div class="version">v1.0.0</div></div>
-      </section>
     </div>
 
     <footer class="action-bar">
       <p id="status" role="status" aria-live="polite" hidden></p>
       <button id="sendBtn" class="primary" disabled><span id="sendLabel">Mulai</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
       <button id="stopBtn" class="stop-button" hidden><span aria-hidden="true" class="stop-mark"></span><span id="stopLabel">Hentikan</span></button>
-      <button id="saveBtn" class="primary" hidden>Simpan</button>
     </footer>
   </div>
   <script src="popup.js"></script>

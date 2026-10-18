@@ -141,4 +141,17 @@ describe('getMatchRows — soal menjodohkan', () => {
     d.innerHTML = '<p>tanpa select</p>';
     expect(getMatchRows(d)).toEqual([]);
   });
+  it('numbers image-only options instead of falling back to their values', () => {
+    const q = que('<div class="answer">' +
+      '<div class="r0"><input type="radio" value="0"><label><img src="/a.png"></label></div>' +
+      '<div class="r1"><input type="radio" value="1"><label><img src="/b.png" alt="segitiga"></label></div></div>');
+    expect(getMoodleOptions(q).map(o => o.text)).toEqual(['[gambar Opsi 1]', '[gambar Opsi 2: segitiga]']);
+  });
+});
+
+describe('getMatchRows — stem bergambar', () => {
+  it('marks stem images with their row number', () => {
+    const q = que('<table class="answer"><tr><td><img src="/a.png" alt="segitiga"></td><td><select><option>3 sisi</option></select></td></tr></table>');
+    expect(getMatchRows(q)[0].stem).toBe('[gambar Baris 1: segitiga]');
+  });
 });

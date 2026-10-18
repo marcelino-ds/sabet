@@ -1,9 +1,9 @@
 import { createSessionStore } from './session-store.js';
 import { getProvider } from '../shared/providers.js';
 import { normalizeAnswer } from '../shared/answer-parser.js';
-import { solveViaApi } from '../shared/api-client.js';
 import { requestKey } from '../shared/session-guard.js';
 import { editorAccess } from './editor-access.js';
+import { fetchImageDataUrl } from './image-fetch.js';
 
 const terminal = s => !s || ['done', 'aborted', 'error'].includes(s.phase);
 const identity = s => ({ sessionId: s.id, requestId: s.requestId, questionKey: s.questionKey });
@@ -12,7 +12,6 @@ const sameRequest = (s, m) => s && s.id === m.sessionId && s.requestId === m.req
 // All durable session mutations pass through this owner. Provider operations run
 // outside the mutation queue; identity checks discard their late completions.
 export function createBackground(api) {
-  const controllers = new Map();
   const store = createSessionStore({
     read: async () => (await api.storage.local.get('sabetSession')).sabetSession || null,
     write: s => api.storage.local.set({ sabetSession: s }),
@@ -32,10 +31,7 @@ export function createBackground(api) {
   };
   const cleanup = async (s, close = false) => {
     if (!s) return;
-    const key = requestKey(identity(s));
-    controllers.get(key)?.abort();
-    controllers.delete(key);
-    await api.alarms.clear('sabet-request:' + key);
+    await api.alarms.clear('sabet-request:' + requestKey(identity(s)));
     if (s.providerTabId) {
       await api.tabs.sendMessage(s.providerTabId, { action: 'STOP_PROCESS', ...identity(s) }).catch(() => {});
       if (close) await api.tabs.remove(s.providerTabId).catch(() => {});
@@ -72,41 +68,14 @@ export function createBackground(api) {
     await api.storage.local.set({ sabetProviderTab: tab.id });
     await api.tabs.sendMessage(tab.id, { action: 'NEW_PAYLOAD', ...identity(s) }).catch(() => {});
   };
-  const perform = async s => {
-    try {
-      const provider = getProvider(s.provider);
-      if (s.transport === 'api') {
-        const cfg = await api.storage.local.get('apiKey_' + s.provider);
-        if (!(await activeRequest(s))) return;
-        const key = cfg['apiKey_' + s.provider];
-        if (!key) { await fail(s, 'API key belum diisi. Isi key atau pilih mode tab AI.'); return; }
-        const controller = new AbortController();
-        controllers.set(requestKey(identity(s)), controller);
-        // A request deadline is also persisted as a Chrome alarm, so suspension
-        // of the service worker cannot leave a session waiting forever.
-        const timeout = setTimeout(() => controller.abort(), 90000);
-        try {
-          const selected = { ...provider, api: { ...provider.api, model: s.model || provider.api.model } };
-          const answer = await solveViaApi(selected, key, s.payload, { signal: controller.signal });
-          await accept(s, answer);
-        } finally {
-          clearTimeout(timeout);
-          controllers.delete(requestKey(identity(s)));
-        }
-      } else await openTab(s);
-    } catch (error) { await fail(s, error.name === 'AbortError' ? 'Permintaan AI dibatalkan atau melewati batas waktu.' : error.message); }
-  };
   const launch = async s => {
     if (!(await activeRequest(s))) return;
+    // The request deadline is persisted as a Chrome alarm, so suspension of the
+    // service worker cannot leave a session waiting forever.
     await api.alarms.create('sabet-request:' + requestKey(identity(s)), { when: s.deadline });
-    const key = requestKey(identity(s));
-    const persisted = await store.read();
-    if (persisted?.startedRequestId === persisted.requestId && persisted.transport === 'api' && !controllers.has(key)) {
-      await store.reclaim(identity(s));
-    }
     const claimed = await store.claim(identity(s));
     if (!claimed) return;
-    void perform(claimed);
+    void openTab(claimed).catch(error => fail(claimed, error.message));
   };
   const start = async (m, sender) => {
     if (!popupSender(sender)) throw new Error('Mulai dari popup.');
@@ -122,7 +91,7 @@ export function createBackground(api) {
     });
     if (!probes[0]?.result) throw new Error('Buka halaman pengerjaan kuis Moodle.');
     await cleanup(old, true);
-    const s = await store.start({ tabId: tab.id, url: tab.url, provider: m.provider, prompt: m.prompt, transport: m.transport, model: m.model });
+    const s = await store.start({ tabId: tab.id, url: tab.url, provider: m.provider, prompt: m.prompt });
     await api.tabs.sendMessage(tab.id, { action: 'START', sessionId: s.id });
     return s;
   };
@@ -130,7 +99,8 @@ export function createBackground(api) {
     if (sender.id !== api.runtime.id) throw new Error('Pengirim tidak dikenali.');
     if (m.action === 'SESSION_START') return start(m, sender);
     const s = await store.read();
-    if (m.action === 'SESSION_STATE') return owner(s, sender) ? s : null;
+    // Tab kuis polling tiap 500 ms; payload (bisa berisi gambar MB-an) hanya untuk tab AI.
+    if (m.action === 'SESSION_STATE') return owner(s, sender) ? { ...s, payload: null } : null;
     if (m.action === 'PROVIDER_PAYLOAD') {
       if (terminal(s) || s.phase !== 'waiting_for_answer' || !providerSender(s, sender)) return null;
       return { ...s.payload, ai: s.provider, ...identity(s) };
@@ -167,6 +137,11 @@ export function createBackground(api) {
         args: [{ id: m.id, kind: m.kind, ...(m.value === undefined ? {} : { value: m.value }) }],
       });
       return results[0]?.result || { ok: false, value: '' };
+    }
+    if (m.action === 'FETCH_IMAGE') {
+      // Hanya untuk soal aktif yang sedang disiapkan, dari tab kuis pemilik sesi.
+      if (!sender.tab || !['solving', 'retrying'].includes(s.phase) || sender.tab.url !== s.target?.url) throw new Error('Gambar soal tidak cocok dengan sesi.');
+      return fetchImageDataUrl(m.url, { signal: AbortSignal.timeout(25000) });
     }
     if (m.action === 'OPEN_AI') {
       if (sameRequest(s, m) && s.phase === 'waiting_for_answer') await launch(s);

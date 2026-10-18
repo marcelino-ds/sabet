@@ -4,11 +4,9 @@ import { sessionCopy, friendlyError } from '../shared/ui-copy.js';
 
 const $ = id => document.getElementById(id);
 let provider = DEFAULT_PROVIDER;
-let settings = {};
 let currentSession = null;
 let targetTab = null;
 let busy = false;
-let view = 'home';
 let savedPrompt = '';
 const active = s => s && !['done', 'aborted', 'error'].includes(s.phase);
 
@@ -27,18 +25,9 @@ function fail(error) { status(friendlyError(error?.message || error), 'error'); 
 
 function renderControls() {
   const running = active(currentSession);
-  const home = view === 'home';
-  $('homeView').hidden = !home;
-  $('settingsView').hidden = home;
-  $('homeHeading').hidden = !home;
-  $('settingsHeading').hidden = home;
-  $('settingsBtn').hidden = !home;
-  $('settingsBtn').disabled = busy;
-  $('sendBtn').hidden = !home || running;
+  $('sendBtn').hidden = !!running;
   $('stopBtn').hidden = !running;
-  $('saveBtn').hidden = home || running;
   $('sendBtn').disabled = busy || !targetTab;
-  $('saveBtn').disabled = busy;
   $('stopBtn').disabled = busy;
   $('stopLabel').textContent = busy && running ? 'Berhenti...' : 'Hentikan';
   $('sendLabel').textContent = busy ? 'Bentar...' : currentSession ? 'Mulai lagi' : 'Mulai';
@@ -47,36 +36,16 @@ function renderControls() {
   $('prompt').disabled = running || busy;
   $('prompt').hidden = !!running;
   document.querySelector('.prompt-label').hidden = !!running;
-  for (const id of ['transport', 'apiKey', 'model']) $(id).disabled = running || busy;
-  $('pagePanel').hidden = !!currentSession;
-}
-function switchView(next) {
-  view = next;
-  status();
-  renderControls();
-  $('scrollArea').scrollTop = 0;
-  if (view === 'settings') $('backBtn').focus();
-  else $('settingsBtn').focus();
+  // Setelah sesi selesai, tetap jelaskan kenapa "Mulai lagi" mati di luar halaman soal.
+  $('pagePanel').hidden = !!running || (!!currentSession && !!targetTab);
 }
 function displayProvider() {
   document.querySelectorAll('input[name="provider"]').forEach(input => { input.checked = input.value === provider; });
-  $('apiKey').value = settings['apiKey_' + provider] || '';
-  $('model').value = settings['model_' + provider] || PROVIDERS[provider].api.model;
-  $('apiKeyLink').href = PROVIDERS[provider].api.keyUrl;
-  document.querySelector('.settings-provider').textContent = PROVIDERS[provider].label;
 }
-function showMode() { $('apiSettings').hidden = $('transport').value !== 'api'; }
 
 async function saveSettings() {
-  const patch = {
-    lastProvider: provider,
-    apiMode: $('transport').value === 'api',
-    prompt: $('prompt').value,
-    ['apiKey_' + provider]: $('apiKey').value.trim(),
-    ['model_' + provider]: $('model').value.trim(),
-  };
+  const patch = { lastProvider: provider, prompt: $('prompt').value };
   await chrome.storage.local.set(patch);
-  Object.assign(settings, patch);
   savedPrompt = patch.prompt;
 }
 function showSession(s) {
@@ -98,7 +67,7 @@ function showSession(s) {
 }
 
 async function init() {
-  settings = await chrome.storage.local.get(['lastProvider', 'apiMode', 'prompt', ...Object.keys(PROVIDERS).flatMap(id => ['apiKey_' + id, 'model_' + id])]);
+  const settings = await chrome.storage.local.get(['lastProvider', 'prompt']);
   provider = PROVIDERS[settings.lastProvider] ? settings.lastProvider : DEFAULT_PROVIDER;
   for (const p of Object.values(PROVIDERS)) {
     const label = document.createElement('label');
@@ -109,11 +78,9 @@ async function init() {
     label.querySelector('.provider-symbol').innerHTML = icons[p.id];
     $('providerOptions').appendChild(label);
   }
-  $('transport').value = settings.apiMode ? 'api' : 'tab';
   $('prompt').value = settings.prompt || '';
   savedPrompt = $('prompt').value;
   displayProvider();
-  showMode();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id && /^https:\/\//.test(tab.url || '')) {
@@ -136,9 +103,6 @@ $('providerOptions').addEventListener('change', event => {
   displayProvider();
   void chrome.storage.local.set({ lastProvider: provider }).catch(fail);
 });
-$('settingsBtn').addEventListener('click', () => switchView('settings'));
-$('backBtn').addEventListener('click', () => switchView('home'));
-$('transport').addEventListener('change', showMode);
 $('prompt').addEventListener('blur', () => {
   if ($('prompt').value === savedPrompt) return;
   const prompt = $('prompt').value;
@@ -151,14 +115,8 @@ $('sendBtn').addEventListener('click', async () => {
   renderControls();
   try {
     await saveSettings();
-    if ($('transport').value === 'api' && !$('apiKey').value.trim()) {
-      switchView('settings');
-      status('API key kosong.', 'error');
-      return;
-    }
     const s = await rpc({
-      action: 'SESSION_START', tabId: targetTab.id, url: targetTab.url, provider,
-      prompt: $('prompt').value, transport: $('transport').value, model: $('model').value.trim(),
+      action: 'SESSION_START', tabId: targetTab.id, url: targetTab.url, provider, prompt: $('prompt').value,
     }, 20000);
     showSession(s);
   } catch (error) { fail(error); }
@@ -172,16 +130,6 @@ $('stopBtn').addEventListener('click', async () => {
   try { showSession(await rpc({ action: 'STOP_PROCESS', sessionId: currentSession.id })); }
   catch (error) { fail(error); }
   finally { busy = false; renderControls(); }
-});
-$('saveBtn').addEventListener('click', async () => {
-  if (busy) return;
-  busy = true; renderControls();
-  try { await saveSettings(); switchView('home'); status('Udah disimpan.'); }
-  catch (error) { fail(error); }
-  finally { busy = false; renderControls(); }
-});
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && view === 'settings') { event.preventDefault(); switchView('home'); }
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.sabetSession) showSession(changes.sabetSession.newValue);

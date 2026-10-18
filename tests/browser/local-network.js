@@ -12,8 +12,10 @@ export async function localNetwork(readPage) {
     key: await readFile(new URL('./fixtures/localhost.key', import.meta.url)),
     cert: await readFile(new URL('./fixtures/localhost.crt', import.meta.url)),
   }, (req, res) => {
-    const body = readPage(req.headers.host, req.url);
-    res.writeHead(body ? 200 : 204, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    // A fixture is either an HTML string or { type, body } for other resources.
+    const page = readPage(req.headers.host, req.url);
+    const { type = 'text/html', body } = typeof page === 'object' && page ? page : { body: page };
+    res.writeHead(body ? 200 : 204, { 'Content-Type': type, 'Cache-Control': 'no-store' });
     res.end(body || '');
   });
   tls.on('connection', track);

@@ -53,8 +53,6 @@ export function createSessionStore(storage) {
       url: input.url || '',
       provider: input.provider || 'gemini',
       prompt: input.prompt || '',
-      transport: input.transport === 'api' ? 'api' : 'tab',
-      model: input.model || '',
       phase: 'solving',
       target: null,
       requestId: null,
@@ -64,6 +62,7 @@ export function createSessionStore(storage) {
       dispatches: 0,
       requestFailures: 0,
       checkRetries: 0,
+      rejected: [],
       stats: normalizeStats(input.stats),
       completed: {},
       error: null,
@@ -88,6 +87,7 @@ export function createSessionStore(storage) {
         next.checkRetries = 0;
         next.requestFailures = 0;
         next.error = null;
+        next.rejected = [];
       }
       next.target = clone(payload.target);
       next.questionKey = payload.target.key;
@@ -164,6 +164,8 @@ export function createSessionStore(storage) {
         next.checkRetries += 1;
         next.phase = 'retrying';
         next.error = payload.error || null;
+        // Jawaban yang sudah dinilai salah dikirim balik ke AI agar tidak diulang.
+        if (state.answer) next.rejected = [...(state.rejected || []), { answer: clone(state.answer), feedback: String(payload.error || '').slice(0, 1500) }].slice(-3);
       }
       next.answer = null;
       next.requestId = null;
@@ -209,11 +211,5 @@ export function createSessionStore(storage) {
     return write({ ...current, providerTabId: tabId });
   });
 
-  const reclaim = identity => mutate(async current => {
-    const r = normalizeIdentity(identity);
-    if (!current || current.phase !== 'waiting_for_answer' || current.id !== r.sessionId || current.requestId !== r.requestId || current.questionKey !== r.questionKey) return null;
-    return write({ ...current, startedRequestId: null });
-  });
-
-  return { read, start, event, answer, failure, claim, bindTab, reclaim };
+  return { read, start, event, answer, failure, claim, bindTab };
 }

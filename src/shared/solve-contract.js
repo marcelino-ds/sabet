@@ -1,5 +1,4 @@
-// Kontrak prompt + parsing jawaban — SATU sumber kebenaran untuk kedua jalur:
-// jalur tab (injector menyetir web UI) dan jalur API (background fetch langsung).
+// Kontrak prompt + parsing jawaban untuk tab AI yang disetir injector.
 //
 // Desain prompt: model BOLEH menalar dulu seperlunya (langkah penuh untuk soal
 // hitungan), lalu WAJIB menutup dengan satu blok JSON. Memaksa "JSON only, no
@@ -10,8 +9,7 @@
 // Bentuk JSON jawaban yang diharapkan dari model.
 export const ANSWER_SHAPE = '{ "jawaban": "<teks/array/kode>", "index_pilihan": <nomor> }';
 
-// Aturan pengisian per tipe soal. Dipakai apa adanya di jalur tab (ditempel ke
-// prompt) dan sebagai instruksi sistem di jalur API.
+// Aturan pengisian per tipe soal, ditempel apa adanya ke prompt.
 export function buildAnswerRules() {
   return `Aturan pengisian "jawaban" & "index_pilihan":
 - PILIHAN GANDA (1 jawaban) → Opsi sudah DIBERI NOMOR di daftar "Opsi". "index_pilihan": nomor opsi benar PERSIS dari daftar (1/2/3/...). "jawaban": salin teks opsi itu apa adanya. NOMOR penentu utama.
@@ -24,7 +22,7 @@ export function buildAnswerRules() {
 PENTING: Untuk pilihan ganda 1 jawaban, "index_pilihan" HARUS cocok dengan nomor opsi di daftar "Opsi" dan "jawaban" HARUS sama dengan teks opsi pada nomor itu.`;
 }
 
-// Jalur TAB: ditempel ke akhir prompt yang dikirim ke web UI. Model boleh menalar
+// Ditempel ke akhir prompt yang dikirim ke web UI. Model boleh menalar
 // singkat, lalu menutup dengan satu blok JSON yang akan diekstrak.
 export function buildAutoSolveRules() {
   return `
@@ -36,11 +34,4 @@ ${ANSWER_SHAPE}
 \`\`\`
 ${buildAnswerRules()}
 Blok JSON harus menjadi bagian PALING AKHIR dari responsmu.`;
-}
-
-// Jalur API: instruksi sistem. Di sini kita bisa memaksa JSON-only karena model API
-// mendukung response schema / JSON mode, jadi tak perlu menalar di teks bebas.
-export function buildApiSystemInstruction() {
-  return `Kamu adalah mesin penjawab soal kuis. Balas HANYA dengan satu objek JSON valid berbentuk ${ANSWER_SHAPE}.
-${buildAnswerRules()}`;
 }
