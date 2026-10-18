@@ -70,3 +70,10 @@ describe('htmlToMarkdown', () => {
     expect(md).toContain('[gambar: diagram]');
   });
 });
+
+describe('htmlToMarkdown — MathJax v2', () => {
+  it('sends the TeX source once instead of the rendered glyphs too', () => {
+    const md = htmlToMarkdown(el('<p>Hitung <span class="MathJax_Preview"></span><span class="MathJax" id="MathJax-Element-1-Frame"><span>x2</span><span class="MJX_Assistive_MathML"><math><mi>x</mi><mn>2</mn></math></span></span><script type="math/tex" id="MathJax-Element-1">x^2</script> sekarang</p>'));
+    expect(md.replace(/\s+/g, ' ')).toBe('Hitung $x^2$ sekarang');
+  });
+});

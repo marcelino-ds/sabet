@@ -5,7 +5,7 @@ import { rpc, delay } from '../shared/browser.js';
 import {
   findUnansweredQuestion, findButton, getGapFillInputs, buildGapFillTemplate,
 } from './dom-utils.js';
-import { detectQuestionImages, extractQuestionImages, stitchImages } from './question-images.js';
+import { collectQuestionImages, stitchImages } from './question-images.js';
 import { getMoodleOptions, getMatchRows } from './moodle-options.js';
 import {
   moodleFillMultichoice, moodleFillShortAnswer, moodleFillEssay,
@@ -14,8 +14,10 @@ import {
 import { checkIfCorrect, officialGradeSignature, CODERUNNER_RESULT_SELECTORS } from './grading.js';
 import { getQuestionKey, getQuestionInputSignature, findQuestionByKey } from './question-target.js';
 
+// .qtext saja: .formulation ikut memuat opsi (dikirim terpisah & bernomor), baris
+// editor Ace, dan teks aksesibilitas Moodle.
 function textOf(que) {
-  const body = que?.querySelector('.qtext, .formulation');
+  const body = que?.querySelector('.qtext') || que?.querySelector('.formulation');
   return body ? htmlToMarkdown(body) : '';
 }
 
@@ -23,8 +25,15 @@ function buildQuestionText(que) {
   const type = detectQuestionType(que);
   let text = `SOAL (${type}):\n${textOf(que)}`;
   if (type === 'multichoice' || type === 'truefalse') {
-    const options = getMoodleOptions(que).map(option => option.text).filter(Boolean);
-    if (options.length) text += `\n\nOpsi (urutan = index_pilihan):\n${options.map((option, i) => `${i + 1}. ${option}`).join('\n')}`;
+    // Jangan buang opsi kosong: nomor di prompt harus tetap sama dengan index_pilihan.
+    const options = getMoodleOptions(que);
+    if (options.length) {
+      const multi = options.some(option => option.input.type === 'checkbox');
+      text += multi
+        ? '\n\nJenis: PILIH SATU ATAU LEBIH. "jawaban" WAJIB array teks semua opsi yang benar.'
+        : '\n\nJenis: PILIH SATU.';
+      text += `\n\nOpsi (urutan = index_pilihan):\n${options.map((option, i) => `${i + 1}. ${option.text || '(kosong)'}`).join('\n')}`;
+    }
   }
   if (type === 'match') {
     const rows = getMatchRows(que);
@@ -40,6 +49,16 @@ function buildQuestionText(que) {
   }
   if (type === 'shortanswer' || type === 'numerical') text += '\nKotak isian: ' + que.querySelectorAll('input[type="text"]').length;
   return text.trim();
+}
+// Hanya jawaban yang sudah dinilai SALAH oleh Moodle. Error teknis (tab AI, upload)
+// tidak berguna bagi AI dan bisa membuatnya ragu pada jawaban yang benar.
+function rejectedNote(rejected) {
+  if (!rejected?.length) return '';
+  const lines = rejected.map(({ answer, feedback }, i) => {
+    const note = feedback ? `\n   Feedback Moodle: ${feedback.replace(/\s+/g, ' ').trim()}` : '';
+    return `${i + 1}. ${JSON.stringify(answer).slice(0, 2000)}${note}`;
+  });
+  return `PERHATIAN: jawaban berikut sudah dikirim dan dinilai SALAH oleh Moodle. Jangan ulangi; periksa ulang soalnya.\n${lines.join('\n')}`;
 }
 function snapshot(que) {
   return {
@@ -114,11 +133,16 @@ export function createMoodleAdapter(sessionId) {
     payload: async (que, state, signal) => {
       signal?.throwIfAborted();
       let dataUrl = null;
-      if (detectQuestionImages(que)) {
-        dataUrl = await stitchImages(extractQuestionImages(que));
+      const images = await collectQuestionImages(que, {
+        signal,
+        fetchImage: url => rpc({ action: 'FETCH_IMAGE', sessionId, url }, 30000),
+      });
+      if (images.length) {
+        dataUrl = await stitchImages(images);
         if (!dataUrl) throw new Error('Gambar soal tidak dapat dibaca. Review soal bergambar secara manual.');
       }
       let text = buildQuestionText(que);
+      if (dataUrl) text += `\n\nGambar terlampir: ${images.map(image => image.label).join(', ')}. Label di atas tiap gambar menunjukkan asalnya; "Opsi N" adalah gambar milik opsi nomor N.`;
       if (detectQuestionType(que) === 'coderunner' && que.querySelector('.ace_editor') && sessionId) {
         const code = await rpc({ action: 'EDITOR_ACCESS', sessionId, id: que.id, kind: 'ace' });
         if (code.ok) text += '\nKode editor saat ini:\n' + code.value;
@@ -127,7 +151,7 @@ export function createMoodleAdapter(sessionId) {
       return {
         ai: state.provider || 'gemini',
         type: dataUrl ? 'solve_image' : 'solve_text',
-        text, dataUrl, prompt: [state.prompt, state.error ? `Percobaan sebelumnya gagal: ${state.error}` : ''].filter(Boolean).join('\n\n'),
+        text, dataUrl, prompt: [state.prompt, rejectedNote(state.rejected)].filter(Boolean).join('\n\n'),
         target: snapshot(que),
       };
     },

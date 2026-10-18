@@ -63,3 +63,19 @@ return;","index_pilihan":0}
     expect(parseAnswerFromText(text)).toEqual({ jawaban: 'System.out.println("OK");\nreturn;', index_pilihan: 0 });
   });
 });
+
+describe('answer-parser: JSON yang tidak valid dari model', () => {
+  it('accepts raw newlines and tabs inside a code string', () => {
+    const text = 'Jawaban:\n```json\n{ "jawaban": "def f():\n\treturn 1", "index_pilihan": 0 }\n```';
+    expect(parseAnswerFromText(text).jawaban).toBe('def f():\n\treturn 1');
+  });
+  it('keeps brackets inside array items when the JSON needs repair', () => {
+    const text = '{ "jawaban": ["a[0]\n", "b"], "index_pilihan": 0 }';
+    expect(parseAnswerFromText(text).jawaban).toEqual(['a[0]\n', 'b']);
+  });
+  it('decodes an escaped backslash before n as literal text in loose answers', () => {
+    // Koma di akhir membuat JSON.parse gagal sehingga parser longgar dipakai.
+    const text = '{ "jawaban": "printf(\\"a\\n\\");\tx", "index_pilihan": 0, }';
+    expect(parseAnswerFromText(text).jawaban).toBe('printf("a\n");\tx');
+  });
+});

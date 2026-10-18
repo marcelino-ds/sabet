@@ -9,25 +9,42 @@ export function htmlToMarkdown(rootEl) {
   // Buang noise (kecuali script math/tex yang justru sumber LaTeX-nya)
   clone.querySelectorAll('style, noscript').forEach(n => n.remove());
   clone.querySelectorAll('script:not([type^="math/tex"])').forEach(n => n.remove());
+  mathToTex(clone);
+
+  return nodeToMarkdown(clone).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// Ganti math di dalam `clone` (bukan DOM halaman) dengan teks LaTeX. `inline`
+// memaksa satu baris untuk teks opsi.
+export function mathToTex(clone, { inline = false } = {}) {
+  const wrap = (tex, display) => display && !inline ? `\n$$${tex}$$\n` : ` $${tex}$ `;
+
+  // MathJax v2 menyisipkan hasil render (glyph + MathML assistive) sebelum
+  // <script type="math/tex">. Sumber TeX ada di script, jadi buang hasil render
+  // agar rumus tidak terkirim dua-tiga kali.
+  if (clone.querySelector('script[type^="math/tex"]')) {
+    clone.querySelectorAll('.MathJax_Preview, [id^="MathJax-Element-"][id$="-Frame"], .MathJax_Display, .MathJax_SVG_Display, .MJXc-display')
+      .forEach(n => n.remove());
+  }
 
   // MathJax v2: <script type="math/tex"> berisi sumber LaTeX
   clone.querySelectorAll('script[type^="math/tex"]').forEach(s => {
     const tex = (s.textContent || '').trim();
     const display = (s.getAttribute('type') || '').includes('mode=display');
-    if (tex) s.replaceWith(document.createTextNode(display ? `\n$$${tex}$$\n` : ` $${tex}$ `));
+    if (tex) s.replaceWith(document.createTextNode(wrap(tex, display)));
   });
 
   // MathJax v3 + MathML: ambil annotation LaTeX kalau ada, fallback ke aria-label
   clone.querySelectorAll('mjx-container, math').forEach(m => {
+    // <math> di dalam mjx-container yang sudah diganti tidak perlu diproses lagi.
+    if (!clone.contains(m)) return;
     const texAnno = m.querySelector('annotation[encoding="application/x-tex"]');
     let tex = texAnno?.textContent?.trim();
     if (!tex) tex = (m.getAttribute('aria-label') || m.textContent || '').trim();
     const display = m.getAttribute('display') === 'true' ||
                     (m.tagName.toLowerCase() === 'mjx-container' && m.hasAttribute('display'));
-    if (tex) m.replaceWith(document.createTextNode(display ? `\n$$${tex}$$\n` : ` $${tex}$ `));
+    if (tex) m.replaceWith(document.createTextNode(wrap(tex, display)));
   });
-
-  return nodeToMarkdown(clone).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function nodeToMarkdown(node) {

@@ -1,4 +1,4 @@
-// Parser jawaban LLM yang dipakai bersama jalur tab (injector) dan jalur API.
+// Parser jawaban LLM dari balasan tab AI (injector) dan validasi di background.
 // Fokus: ambil objek JSON terakhir yang benar-benar berisi `jawaban`, dengan brace
 // matching seimbang agar jawaban koding berisi `{}` tidak memotong blok JSON.
 
@@ -28,11 +28,30 @@ function normalizeSmartQuotes(text) {
 }
 
 
+// Satu kali lintas: mengganti `\\n` lalu `\\\\` bertahap salah membaca `\\\\n`
+// (backslash literal + n di kode) sebagai baris baru.
+const ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
 function decodeJsonishString(value) {
-  return String(value)
-    .replace(/\\n/g, '\n')
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\');
+  return String(value).replace(/\\(u[0-9a-fA-F]{4}|.)/g, (all, code) =>
+    code.length === 5 ? String.fromCharCode(parseInt(code.slice(1), 16)) : ESCAPES[code] ?? all);
+}
+
+// Model sering menulis kode dengan baris baru/tab mentah di dalam string JSON.
+// JSON.parse menolaknya; escape karakter kontrol yang ada di dalam string saja.
+function escapeRawControlChars(text) {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (escaped) { escaped = false; out += ch; continue; }
+    if (ch === '\\' && inString) { escaped = true; out += ch; continue; }
+    if (ch === '"') inString = !inString;
+    if (inString && ch === '\n') out += '\\n';
+    else if (inString && ch === '\r') out += '\\r';
+    else if (inString && ch === '\t') out += '\\t';
+    else out += ch;
+  }
+  return out;
 }
 
 function tryParseLooseAnswerObject(candidate) {
@@ -57,6 +76,10 @@ function tryParseStrictObject(candidate) {
   const variants = [String(candidate).trim()];
   const normalized = normalizeSmartQuotes(candidate).trim();
   if (normalized !== variants[0]) variants.push(normalized);
+  for (const v of [...variants]) {
+    const repaired = escapeRawControlChars(v);
+    if (repaired !== v) variants.push(repaired);
+  }
 
   for (const v of variants) {
     try {

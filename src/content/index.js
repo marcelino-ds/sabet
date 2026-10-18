@@ -59,6 +59,8 @@ function install() {
     }
   });
   window.addEventListener('pagehide', () => controller?.abort(), { once: true });
-  void start();
+  // Script ini jalan di semua halaman HTTPS. Di luar kuis jangan bangunkan service
+  // worker; tab sesi tetap menerima START dari background setelah halaman selesai dimuat.
+  if (location.pathname.includes('/mod/quiz/')) void start();
 }
 install();

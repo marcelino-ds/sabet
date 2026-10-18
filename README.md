@@ -21,7 +21,7 @@ Ubah kode? `npm run build`, terus Reload.
 
 Buka halaman soal, klik Sabet, pilih AI, Mulai.
 
-Login Gemini/ChatGPT/Claude di browser yang sama, atau isi API key di Pengaturan. Key-nya cuma nyangkut di browser ini.
+Login Gemini/ChatGPT/Claude dulu di browser yang sama. Sabet buka tab AI-nya sendiri dan ngetik soalnya di situ.
 
 `npm test` buat ngetes. Tes di browser: `npm run test:browser`. Edge yang udah terpasang:
 

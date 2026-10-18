@@ -90,12 +90,22 @@ describe('persistent session owner', () => {
     await expect(store.start({ tabId: 8 })).rejects.toThrow();
     expect((await store.read()).id).toBe(s.id);
   });
-  it('can reclaim an API request after a worker restart', async () => {
+});
+
+describe('rejected answers', () => {
+  it('remembers answers Moodle graded wrong until the question changes', async () => {
     const { store, s } = await setup();
     await store.event(s.id, 'QUESTION', { target });
-    const waiting = await store.event(s.id, 'DISPATCH', { payload: {}, requestId: 'r1' });
-    await store.claim(waiting);
-    expect((await store.reclaim(waiting)).startedRequestId).toBeNull();
-    expect((await store.claim(waiting)).startedRequestId).toBe('r1');
+    const waiting = await store.event(s.id, 'DISPATCH', { payload: {} });
+    await store.answer(waiting, { jawaban: '5', index_pilihan: 0 });
+    await store.event(s.id, 'APPLY');
+    await store.event(s.id, 'CHECK', { beforeGrade: '' });
+    const retry = await store.event(s.id, 'RETRY', { error: 'Incorrect' });
+    expect(retry.rejected).toEqual([{ answer: { jawaban: '5', index_pilihan: 0 }, feedback: 'Incorrect' }]);
+    await store.event(s.id, 'DISPATCH', { payload: {} });
+    await store.event(s.id, 'FAIL', { error: 'x' });
+    const next = await store.start({ tabId: 7, url: target.url });
+    await store.event(next.id, 'QUESTION', { target: { ...target, key: 'q2' } });
+    expect((await store.read()).rejected).toEqual([]);
   });
 });
