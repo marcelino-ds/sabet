@@ -21,6 +21,10 @@ export function sessionCopy(session) {
 
 export function friendlyError(error) {
   const text = String(error || '').toLowerCase();
+  if (/navigasi tidak selesai/.test(text)) return 'Halaman berikutnya nggak kebuka. Lanjutin manual.';
+  if (/target soal tidak ditemukan/.test(text)) return 'Soal targetnya nggak ketemu. Refresh halaman soalnya.';
+  if (/soal belum tersedia/.test(text)) return 'Soalnya belum kebuka. Tunggu atau refresh.';
+  if (/buka halaman pengerjaan/.test(text)) return 'Buka halaman pengerjaan kuisnya dulu.';
   if (/gambar.*dilampirkan/.test(text)) return 'Gambar nggak masuk ke AI. Coba AI lain.';
   if (/gambar soal/.test(text)) return 'Gambar soal nggak kebaca.';
   if (/prompt tidak masuk/.test(text)) return 'Soal nggak masuk ke AI.';

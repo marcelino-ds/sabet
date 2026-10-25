@@ -109,7 +109,9 @@ export function createSessionStore(storage) {
       next.target = { ...state.target, signature: payload.signature ?? state.target.signature };
       next.startedRequestId = null;
       next.providerTabId = null;
-      next.deadline = Date.now() + 300000;
+      // 6 menit: slot untuk satu jawaban + satu teguran format JSON bila AI
+      // menjawab tanpa blok JSON (teguran jauh lebih cepat dari dispatch baru).
+      next.deadline = Date.now() + 360000;
       return write(next);
     }
     if (type === 'PRECHECK') {
@@ -118,7 +120,11 @@ export function createSessionStore(storage) {
     }
     if (type === 'NAVIGATE') {
       if (!['solving', 'navigating'].includes(state.phase)) throw new Error('Cannot navigate now');
-      return write({ ...next, phase: 'navigating', navigationUrl: payload.url, deadline: Date.now() + 30000 });
+      // Loop guard: NAVIGATE berulang untuk halaman yang sama (klik next yang
+      // ternyata submit balik ke halaman ini) tidak boleh memperpanjang deadline.
+      // Tanpa ini, loop reload+resume tak berujung tidak pernah timeout.
+      const sameTarget = state.phase === 'navigating' && state.navigationUrl === payload.url && !!state.deadline;
+      return write({ ...next, phase: 'navigating', navigationUrl: payload.url, deadline: sameTarget ? state.deadline : Date.now() + 30000 });
     }
     if (type === 'APPLY') {
       if (state.phase !== 'answer_ready') throw new Error(`Cannot apply in phase ${state.phase}`);

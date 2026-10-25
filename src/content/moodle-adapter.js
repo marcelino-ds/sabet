@@ -2,6 +2,7 @@ import { htmlToMarkdown } from './html-to-markdown.js';
 import { detectPlatform, detectQuestionType } from './platform.js';
 import { getExistingCode } from './ace-editor.js';
 import { rpc, delay } from '../shared/browser.js';
+import { sameQuizPage } from '../shared/util.js';
 import {
   findUnansweredQuestion, findButton, getGapFillInputs, buildGapFillTemplate,
 } from './dom-utils.js';
@@ -111,7 +112,8 @@ export function createMoodleAdapter(sessionId) {
     get url() { return location.href; },
     prepare: async signal => {
       if (detectPlatform() !== 'moodle' || /\/(summary|review)\.php$/.test(location.pathname)) throw new Error('Buka halaman pengerjaan kuis Moodle.');
-      for (let i = 0; !document.querySelector('.que') && i < 30; i++) await delay(200, signal);
+      // Server kampus bisa lambat: beri 15 detik sampai .que dirender.
+      for (let i = 0; !document.querySelector('.que') && i < 75; i++) await delay(200, signal);
       if (!document.querySelector('.que')) throw new Error('Soal belum tersedia di halaman ini.');
     },
     next: state => {
@@ -123,7 +125,18 @@ export function createMoodleAdapter(sessionId) {
       }) || null;
     },
     snapshot,
-    resolve: saved => saved?.url === location.href ? findQuestionByKey(document.querySelectorAll('.que'), saved?.key) : null,
+    // Resume setelah submit/reload: URL boleh berbeda param tambahan (graded,
+    // scrollpos, dsb.) selama masih attempt+page yang sama.
+    resolve: saved => {
+      if (!sameQuizPage(saved?.url, location.href)) return null;
+      const questions = [...document.querySelectorAll('.que')];
+      const exact = findQuestionByKey(questions, saved.key);
+      if (exact || !saved?.id) return exact;
+      // Feedback penilaian bisa menggeser hash teks soal; id kontainer Moodle
+      // (question-N) stabil per slot, jadi fallback ke id bila unik di halaman.
+      const byId = questions.filter(que => que.id === saved.id);
+      return byId.length === 1 ? byId[0] : null;
+    },
     persistApplied: true,
     signature: que => getQuestionInputSignature(que),
     assertTarget: (que, strict, saved) => {

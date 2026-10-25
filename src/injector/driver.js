@@ -105,18 +105,23 @@ export async function writePrompt(editor, prompt, signal) {
   if (!verified()) throw new Error('Prompt tidak masuk dengan lengkap. Pengiriman dihentikan.');
 }
 
-export function waitForAnswer(provider, previous, signal) {
+export function waitForAnswer(provider, previous, signal, options = {}) {
+  const { timeoutMs = 240000, stuckMs = 0 } = options;
   return new Promise((resolve, reject) => {
     let done = false;
     let scheduled;
     let observer;
     let timer;
     let ticker;
+    let stableContent = '';
+    let stableAt = 0;
     const read = () => {
       const nodes = [...document.querySelectorAll(provider.bubbleSelector)].filter(n => !previous.has(n));
-      const node = nodes.at(-1);
-      const content = text(node);
       const streaming = [...document.querySelectorAll(provider.streamingSelector || STOP)].some(visible);
+      // Gabungkan SEMUA bubble baru: jawaban bisa terpecah beberapa pesan, dan
+      // bubble "berpikir"/prosa di akhir tidak boleh menutupi JSON jawaban di
+      // bubble sebelumnya. Ekstraktor tetap ambil blok JSON terakhir.
+      const content = nodes.map(text).join('\n\n');
       return { content, answer: streaming ? null : parseAnswerFromText(content) };
     };
     const finish = (error, answer) => {
@@ -134,6 +139,16 @@ export function waitForAnswer(provider, previous, signal) {
     const inspect = () => {
       if (done) return;
       const current = read();
+      if (stuckMs > 0) {
+        // Teks ada, stabil, tapi tak pernah jadi JSON → serahkan ke pemanggil
+        // (untuk menegur AI minta format) alih-alih menunggu timeout penuh.
+        if (current.content && current.content === stableContent) {
+          if (!current.answer && Date.now() - stableAt >= stuckMs) { finish(null, null); return; }
+        } else {
+          stableContent = current.content;
+          stableAt = Date.now();
+        }
+      }
       gate.observe(current.content, current.answer);
     };
     const abort = () => finish(signal.reason);
@@ -144,11 +159,29 @@ export function waitForAnswer(provider, previous, signal) {
       scheduled = setTimeout(() => { scheduled = null; inspect(); }, 100);
     });
     observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
-    timer = setTimeout(() => finish(new Error('AI tidak memberi jawaban dalam 4 menit.')), 240000);
+    timer = setTimeout(() => finish(new Error('AI tidak memberi jawaban tepat waktu.')), timeoutMs);
     ticker = setInterval(inspect, 1000);
     inspect();
   });
 }
+
+// Tombol kirim baru aktif setelah unggahan gambar selesai / prompt masuk.
+async function clickSend(provider, waitMs, signal) {
+  const button = await waitFor(() => provider.sendSelectors.flatMap(sel => [...document.querySelectorAll(sel)]).find(b =>
+    visible(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && !/stop|cancel|hentikan|mic|voice/i.test(b.getAttribute('aria-label') || '')
+  ), waitMs, signal);
+  signal.throwIfAborted();
+  button.click();
+}
+
+const JSON_NUDGE = [
+  'Jawabanmu belum berisi blok JSON yang diminta.',
+  'Kirim ulang jawaban akhirmu secara ringkas, lalu tutup dengan TEPAT SATU blok JSON:',
+  '```json',
+  '{ "jawaban": <teks/array/kode>, "index_pilihan": <nomor> }',
+  '```',
+  'Tanpa teks apa pun setelah blok JSON itu.',
+].join('\n');
 
 export async function runProvider(provider, payload, signal, status, sent) {
   const editor = await waitFor(() => first(provider.editorSelectors), 20000, signal);
@@ -160,14 +193,21 @@ export async function runProvider(provider, payload, signal, status, sent) {
   }
   await writePrompt(first(provider.editorSelectors) || editor, prompt, signal);
   const previous = new Set(document.querySelectorAll(provider.bubbleSelector));
-  // Tombol kirim baru aktif setelah unggahan gambar selesai.
-  const button = await waitFor(() => provider.sendSelectors.flatMap(sel => [...document.querySelectorAll(sel)]).find(b =>
-    visible(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && !/stop|cancel|hentikan|mic|voice/i.test(b.getAttribute('aria-label') || '')
-  ), payload.dataUrl ? 60000 : 10000, signal);
-  signal.throwIfAborted();
-  button.click();
+  await clickSend(provider, payload.dataUrl ? 60000 : 10000, signal);
   await waitFor(() => !text(first(provider.editorSelectors)).trim() || [...document.querySelectorAll(provider.bubbleSelector)].some(n => !previous.has(n)), 10000, signal);
   await sent();
   status('Nunggu jawaban AI.');
-  return waitForAnswer(provider, previous, signal);
+  let answer = await waitForAnswer(provider, previous, signal, { stuckMs: 25000 });
+  if (!answer) {
+    // AI menjawab tanpa blok JSON (prosa saja). Tegur di percakapan yang sama —
+    // jauh lebih cepat daripada dispatch baru yang mengulang unggah soal/gambar.
+    const nudgeEditor = first(provider.editorSelectors);
+    if (!nudgeEditor) throw new Error('AI tidak memberi jawaban JSON yang diminta.');
+    status('Minta format JSON.');
+    await writePrompt(nudgeEditor, JSON_NUDGE, signal);
+    await clickSend(provider, 10000, signal);
+    answer = await waitForAnswer(provider, previous, signal, { timeoutMs: 180000 });
+    if (!answer) throw new Error('AI tidak memberi jawaban JSON yang diminta.');
+  }
+  return answer;
 }

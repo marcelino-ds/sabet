@@ -27,6 +27,47 @@ describe('provider DOM driver', () => {
     await vi.advanceTimersByTimeAsync(2000);
     ctrl.abort(); await assertion;
   });
+  it('finds the JSON answer even when a later bubble is prose without JSON', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<article>```json\n{"jawaban":"4","index_pilihan":0}\n```</article><article>Jawabannya empat.</article>';
+    const ctrl = new AbortController(); let result;
+    const pending = driver.waitForAnswer(provider, new Set(), ctrl.signal).then(v => { result = v; });
+    await vi.advanceTimersByTimeAsync(2500);
+    await pending;
+    expect(result.jawaban).toBe('4');
+  });
+  it('resolves null after the stuck window when prose never becomes JSON', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<article>Jawaban berupa prosa saja.</article>';
+    const ctrl = new AbortController(); let result;
+    const pending = driver.waitForAnswer(provider, new Set(), ctrl.signal, { stuckMs: 25000 }).then(v => { result = v; });
+    await vi.advanceTimersByTimeAsync(26000);
+    await pending;
+    expect(result).toBeNull();
+  });
+  it('nudges the AI once for the JSON block when it answered in prose', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<textarea></textarea><button class="send">Kirim</button>';
+    let sends = 0;
+    document.querySelector('button').addEventListener('click', () => {
+      sends++;
+      const bubble = document.createElement('article');
+      bubble.textContent = sends === 1
+        ? 'Hasilnya adalah empat.'
+        : '```json\n{"jawaban":"4","index_pilihan":0}\n```';
+      document.body.appendChild(bubble);
+      document.querySelector('textarea').value = '';
+    });
+    const proseProvider = { editorSelectors: ['textarea'], sendSelectors: ['button.send'], bubbleSelector: 'article' };
+    const status = vi.fn(); const sent = vi.fn();
+    const run = driver.runProvider(proseProvider, { text: '2+2?' }, new AbortController().signal, status, sent);
+    await vi.advanceTimersByTimeAsync(2000);   // prompt masuk, kirim #1, jawaban prosa
+    await vi.advanceTimersByTimeAsync(30000);  // jendela stuck 25s → teguran → kirim #2
+    await vi.advanceTimersByTimeAsync(3000);   // jawaban JSON stabil
+    await expect(run).resolves.toMatchObject({ jawaban: '4' });
+    expect(sends).toBe(2);
+    expect(status).toHaveBeenCalledWith('Minta format JSON.');
+  });
   it('writes the full prompt into a native editor instead of accepting an old draft', async () => {
     expect(driver.writePrompt).toBeTypeOf('function');
     document.body.innerHTML = '<textarea>old draft</textarea>';

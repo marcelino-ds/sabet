@@ -284,6 +284,93 @@ test('fills two questions through provider tabs after streaming, without final s
     expect(s.dispatches).toBe(2);
     expect(s.stats).toEqual({ solved: 2, correct: 0, failed: 0 });
     expect(await page.evaluate(() => window.finalClicked)).toBeUndefined();
+    // Tab AI dipakai ulang tanpa navigasi: dua soal, satu tab Gemini yang sama.
+    expect(f.context.pages().filter(p => p.url().startsWith('https://gemini.google.com/'))).toHaveLength(1);
+  } finally { await f.close(); }
+});
+
+// Dua soal di DUA halaman: tombol next Moodle adalah submit form sungguhan ke
+// attempt.php?page=1. Reproduksi kasus "selesai satu soal tapi tidak lanjut ke
+// halaman/soal berikutnya" setelah navigasi full-page.
+test('navigates to the next quiz page after finishing a question and keeps going', async () => {
+  test.setTimeout(90000);
+  const page1 = '<!doctype html><html><body class="path-mod-quiz">' +
+    '<form id="responseform" method="post" action="/mod/quiz/attempt.php?attempt=1&amp;page=1">' +
+    '<div class="que shortanswer notyetanswered" id="q1"><div class="qtext">2+2</div>' +
+    '<div class="answer"><input type="text" name="a1"></div></div>' +
+    '<div class="submitbtns"><input type="submit" name="next" value="Next page"></div>' +
+    '</form></body></html>';
+  const page2 = '<!doctype html><html><body class="path-mod-quiz"><form id="responseform">' +
+    '<div class="que shortanswer notyetanswered" id="q2"><div class="qtext">3+3</div>' +
+    '<div class="answer"><input type="text" name="a2"></div></div>' +
+    '<button name="finishattempt" type="button" onclick="window.finalClicked=true">Submit all and finish</button>' +
+    '</form></body></html>';
+  const f = await launch({
+    resource: (host, url) => {
+      if (host !== 'lms.test') return null;
+      return url.includes('page=1') ? page2 : page1;
+    },
+  });
+  try {
+    const { page } = await start(f);
+    try {
+      await expect.poll(async () => (await read(f))?.phase, { timeout: 60000 }).toBe('done');
+    } catch (error) {
+      console.log('Session diagnostic:', JSON.stringify(await read(f)));
+      for (const p of f.context.pages()) console.log('Page diagnostic:', p.url(), await p.locator('body').innerText().catch(() => 'unavailable'));
+      throw error;
+    }
+    await expect.poll(() => page.url()).toContain('page=1');
+    await expect(page.locator('[name=a2]')).toHaveValue('6');
+    const s = await read(f);
+    expect(s.dispatches).toBe(2);
+    expect(s.stats).toEqual({ solved: 2, correct: 0, failed: 0 });
+    expect(await page.evaluate(() => window.finalClicked)).toBeUndefined();
+  } finally { await f.close(); }
+});
+
+// Varian interactive/adaptive seperti iLab: tombol Check ada DI DALAM .que dan
+// me-reload halaman (server mengembalikan halaman sama dengan status Correct),
+// baru tombol next berpindah halaman. Ini jalur: CHECK reload -> COMPLETE ->
+// NAVIGATE next -> resume di halaman 2.
+test('checks a question through a full reload, then moves on to the next page', async () => {
+  test.setTimeout(90000);
+  const quizPage = graded => '<!doctype html><html><body class="path-mod-quiz">' +
+    '<form id="responseform" method="post" action="/mod/quiz/attempt.php?attempt=1&amp;page=1">' +
+    `<div class="que shortanswer${graded ? ' correct' : ' notyetanswered'}" id="q1"><div class="qtext">2+2</div>` +
+    '<div class="answer"><input type="text" name="a1"></div>' +
+    (graded ? '<div class="info"><div class="state">Correct</div></div><div class="outcome">Jawaban benar</div>' : '') +
+    '<button type="submit" name="check" formaction="/mod/quiz/attempt.php?attempt=1&amp;graded=1" value="Check">Check</button></div>' +
+    '<div class="submitbtns"><input type="submit" name="next" value="Next page"></div>' +
+    '</form></body></html>';
+  const page2 = '<!doctype html><html><body class="path-mod-quiz"><form id="responseform">' +
+    '<div class="que shortanswer notyetanswered" id="q2"><div class="qtext">3+3</div>' +
+    '<div class="answer"><input type="text" name="a2"></div></div>' +
+    '<button name="finishattempt" type="button" onclick="window.finalClicked=true">Submit all and finish</button>' +
+    '</form></body></html>';
+  const f = await launch({
+    resource: (host, url) => {
+      if (host !== 'lms.test') return null;
+      if (url.includes('page=1')) return page2;
+      return quizPage(url.includes('graded=1'));
+    },
+  });
+  try {
+    const { page } = await start(f);
+    try {
+      await expect.poll(async () => (await read(f))?.phase, { timeout: 60000 }).toBe('done');
+    } catch (error) {
+      console.log('Session diagnostic:', JSON.stringify(await read(f)));
+      for (const p of f.context.pages()) console.log('Page diagnostic:', p.url(), await p.locator('body').innerText().catch(() => 'unavailable'));
+      throw error;
+    }
+    await expect.poll(() => page.url()).toContain('page=1');
+    await expect(page.locator('[name=a2]')).toHaveValue('6');
+    const s = await read(f);
+    expect(s.dispatches).toBe(2);
+    // Q1 dinilai lewat Check (correct); Q2 di halaman 2 tanpa tombol Check → unknown.
+    expect(s.stats).toEqual({ solved: 2, correct: 1, failed: 0 });
+    expect(await page.evaluate(() => window.finalClicked)).toBeUndefined();
   } finally { await f.close(); }
 });
 

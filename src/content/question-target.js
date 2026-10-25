@@ -11,7 +11,10 @@ function hashText(text) {
 
 function questionText(queEl) {
   const clean = queEl?.cloneNode(true);
-  clean?.querySelectorAll('.accesshide, .sr-only, .feedback, .specificfeedback, .outcome, .info, .state, .grade, .mark, textarea, .ace_editor, [contenteditable], .coderunner-test-results, .CodeRunner-test-results, .precheck-results')
+  // Seluruh blok yang Moodle tambahkan SETELAH dinilai harus dibuang: kalau
+  // ikut kehitung, hash identitas soal berubah dan resume pasca-Check gagal
+  // menemukan soal yang sama.
+  clean?.querySelectorAll('.accesshide, .sr-only, .feedback, .specificfeedback, .generalfeedback, .rightanswer, .im-feedback, .im-controls, .outcome, .info, .state, .grade, .mark, .questionflag, .icon, .validationerror, textarea, .ace_editor, [contenteditable], .coderunner-test-results, .CodeRunner-test-results, .precheck-results')
     .forEach(n => n.remove());
   const body = clean?.querySelector('.qtext, .formulation')?.textContent || clean?.textContent || '';
   const options = [...(clean?.querySelectorAll('label, option') || [])].map(el => el.textContent || '').join(' ');

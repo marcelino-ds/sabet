@@ -19,6 +19,12 @@ describe('popup presentation', () => {
     expect(friendlyError('Jawaban tidak dapat diterapkan ke elemen Moodle.')).toBe('Jawaban nggak keisi.');
     expect(friendlyError('Moodle belum memberi nilai CHECK')).toBe('Nilai belum keluar.');
   });
+  it('distinguishes the question-page failure family instead of one generic line', () => {
+    expect(friendlyError('Target soal tidak ditemukan.')).toBe('Soal targetnya nggak ketemu. Refresh halaman soalnya.');
+    expect(friendlyError('Soal belum tersedia di halaman ini.')).toBe('Soalnya belum kebuka. Tunggu atau refresh.');
+    expect(friendlyError('Buka halaman pengerjaan kuis Moodle.')).toBe('Buka halaman pengerjaan kuisnya dulu.');
+    expect(friendlyError('Navigasi tidak selesai. Buka halaman berikutnya secara manual.')).toBe('Halaman berikutnya nggak kebuka. Lanjutin manual.');
+  });
   it('explains image problems instead of a generic failure', () => {
     expect(friendlyError('Gambar soal tidak dapat dibaca: Gambar soal gagal dimuat (403).')).toBe('Gambar soal nggak kebaca.');
     expect(friendlyError('Gambar soal gagal dilampirkan ke tab AI. Coba AI lain.')).toBe('Gambar nggak masuk ke AI. Coba AI lain.');

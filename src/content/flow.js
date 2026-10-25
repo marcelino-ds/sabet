@@ -33,6 +33,12 @@ export async function runFlow({ session, adapter, read, event, launch, signal, s
       switch (state.phase) {
         case 'solving':
         case 'navigating': {
+          // Deadline NAVIGATE sticky di store: kalau klik next ternyata balik ke
+          // halaman yang sama berulang kali, berhenti dengan pesan jelas alih-
+          // alih memutar selamanya.
+          if (state.phase === 'navigating' && state.deadline && Date.now() >= state.deadline) {
+            throw new Error('Navigasi tidak selesai. Buka halaman berikutnya secara manual.');
+          }
           const nextTarget = state.target && state.phase === 'solving'
             ? target()
             : await adapter.next(state, signal);

@@ -35,6 +35,20 @@ describe('Moodle adapter', () => {
     const completed = { [location.href + '#' + getQuestionKey(q, 0)]: 'unknown' };
     expect(createMoodleAdapter().next({ completed })).toBeNull();
   });
+  it('resolves the target by container id when post-grade noise shifts the text hash', () => {
+    const q = question('<input type="text" value="4">');
+    const adapter = createMoodleAdapter();
+    const saved = adapter.snapshot(q);
+    // Perubahan teks apa pun yang lolos dari strip-list tidak boleh membuat
+    // resume kehilangan target: id kontainer tetap menunjuk slot yang sama.
+    q.querySelector('.qtext').textContent = 'Test question (dinilai)';
+    expect(adapter.resolve(saved)).toBe(q);
+  });
+  it('resolves null when the saved target belongs to a different page', () => {
+    const q = question('<input type="text">');
+    const saved = { ...createMoodleAdapter().snapshot(q), url: 'https://lms.test/mod/quiz/attempt.php?attempt=1&page=9' };
+    expect(createMoodleAdapter().resolve(saved)).toBeNull();
+  });
   it('refuses partial short answers before changing any input', async () => {
     const q = question('<input type="text"><input type="text">');
     await expect(createMoodleAdapter().apply(q, { jawaban: ['4'] })).rejects.toThrow();

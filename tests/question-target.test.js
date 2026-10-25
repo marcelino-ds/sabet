@@ -52,4 +52,17 @@ describe('question-target', () => {
     expect(getQuestionKey(q, 0)).toBe(key);
     expect(getQuestionInputSignature(q)).toBe(inputs);
   });
+  it('keeps the same key when post-grade blocks appear inside the formulation', () => {
+    // Tanpa .qtext (fallback .formulation): blok nilai/feedback Moodle pasca-
+    // Check tidak boleh menggeser hash identitas soal.
+    const q = document.createElement('div'); q.id = 'q1';
+    q.innerHTML = '<div class="formulation">Berapa 2 + 2?<div class="answer"><input type="text" value="4"></div></div>';
+    const key = getQuestionKey(q, 0);
+    q.querySelector('.formulation').insertAdjacentHTML('beforeend',
+      '<div class="im-controls">Marks for this submission: 1.00/1.00</div>' +
+      '<div class="outcome">Jawaban benar</div>' +
+      '<div class="generalfeedback">Bagus!</div>' +
+      '<div class="rightanswer">Jawaban benar: 4</div>');
+    expect(getQuestionKey(q, 0)).toBe(key);
+  });
 });
